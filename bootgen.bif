@@ -1,6 +1,6 @@
 the_ROM_image:
 {
-	[bootloader, destination_cpu=a53-0] blobs/fsbl-k26-sm-sdt.elf
+	[bootloader, destination_cpu=a53-0] blobs/fsbl.elf
 	[pmufw_image] blobs/pmufw.elf
     [destination_device=pl] blobs/download.bit
 	[destination_cpu=a53-0, load=0x100000] blobs/system-zynqmp-sck-kv-g-revB.dtb

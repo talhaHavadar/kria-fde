@@ -14,8 +14,8 @@ platforms:
     build-on: [amd64, arm64]
     build-for: arm64
 environment:
-  LD_LIBRARY_PATH: ${SNAP}/usr/lib/${CRAFT_ARCH_TRIPLET_BUILD_FOR}
-  PATH: ${SNAP}/bin:${PATH}
+  LD_LIBRARY_PATH: ${SNAP}/usr/lib:${SNAP}/usr/lib/${CRAFT_ARCH_TRIPLET_BUILD_FOR}
+  PATH: ${SNAP}/bin:/usr/libexec/gcc/aarch64-none-elf/14.3.1/:${PATH}
 # prebuilt bins: https://github.com/Xilinx/embpf-bootfw-update-tool/releases/tag/v3.0
 # following: https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842156/Fetch+Sources
 parts:
@@ -32,15 +32,35 @@ parts:
     override-pull: |
       craftctl default
       wget https://developer.arm.com/-/media/Files/downloads/gnu/14.3.rel1/binrel/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf.tar.xz
-      tar xvf arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf.tar.xz -C /usr/local/bin/ \
-        --strip-components 2 arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf/bin
+      tar xvf arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf.tar.xz
     override-build: |
+      TOOLCHAIN_DIR="$(pwd)/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf"
+      # Add the toolchain's main bin directory to the PATH
+      export PATH="$TOOLCHAIN_DIR/bin:$PATH"
+
+      # The toolchain is looking for helpers in a hardcoded system path.
+      # We create that path and symlink our locally extracted toolchain libs into it.
+      # This requires sudo, which is available during Snapcraft builds.
+      HARDCODED_PATH="/usr/libexec/gcc/aarch64-none-elf/14.3.1"
+      ACTUAL_LIBS_PATH="$TOOLCHAIN_DIR/libexec/gcc/aarch64-none-elf/14.3.1"
+
+      echo "Applying symlink fix for hardcoded toolchain path..."
+      if [ -d "$ACTUAL_LIBS_PATH" ]; then
+        # Create the parent directories for the hardcoded path
+        mkdir -p "$(dirname "$HARDCODED_PATH")"
+        # Create the symbolic link
+        ln -s "$ACTUAL_LIBS_PATH" "$HARDCODED_PATH" || true
+        echo "Symlink created successfully."
+      else
+        echo "ERROR: Toolchain internal directory not found at $ACTUAL_LIBS_PATH"
+        exit 1
+      fi
+
       cd lib/sw_apps/zynqmp_fsbl/src/
       make CFLAGS+=-DFSBL_DEBUG_INFO
-    # stage:
-    #   - blobs/fsbl-k26-sm-sdt.elf
-    #   - blobs/zynqmp_fsbl.elf
-    #   - blobs/system-zynqmp-sck-kv-g-revB.dtb
+      install -D -m 0644 fsbl.elf ${CRAFT_PART_INSTALL}/blobs/fsbl.elf
+    stage:
+      - blobs/fsbl.elf
     prime:
       - -*
   pmu-firmware:
@@ -50,6 +70,7 @@ parts:
       - blobs/pmu-firmware-k26-sm-sdt.elf
       - blobs/pmufw.elf
       - blobs/download.bit
+      - blobs/system-zynqmp-sck-kv-g-revB.dtb
     prime:
       - -*
   arm-trusted-firmware:
@@ -58,6 +79,8 @@ parts:
     source: https://github.com/Xilinx/arm-trusted-firmware.git
     source-type: git
     source-tag: xlnx_rebase_v2.12_2025.1
+    build-packages:
+      - crossbuild-essential-arm64
     build-environment:
       - PLAT: 'zynqmp'
       - RESET_TO_BL31: '1'
@@ -76,6 +99,7 @@ parts:
     source-branch: xlnx_rebase_v2025.01_update
     source-type: git
     build-packages:
+      - crossbuild-essential-arm64
       - bc
       - bison
       - flex
