@@ -19,60 +19,114 @@ environment:
 # prebuilt bins: https://github.com/Xilinx/embpf-bootfw-update-tool/releases/tag/v3.0
 # following: https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842156/Fetch+Sources
 parts:
+  arm-toolchain:
+    plugin: nil
+    source: https://developer.arm.com/-/media/Files/downloads/gnu/13.3.rel1/binrel/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-elf.tar.xz
+    source-type: tar
+    override-build: |
+      # Install the prebuilt toolchain
+      mkdir -p ${CRAFT_PART_INSTALL}/toolchain
+      cp -r * ${CRAFT_PART_INSTALL}/toolchain/
+
+      # Create symlinks in a standard location
+      mkdir -p ${CRAFT_PART_INSTALL}/bin
+      cd ${CRAFT_PART_INSTALL}/bin
+      for tool in ${CRAFT_PART_INSTALL}/toolchain/bin/aarch64-none-elf-*; do
+        ln -sf "$tool" "$(basename $tool)"
+      done
+    stage:
+      - toolchain/
+      - bin/
+    prime:
+      - -*
+  ###################### END OF TOOLCHAIN SETUP ###############################
+  blobs:
+    plugin: nil
+    source: https://github.com/Xilinx/soc-prebuilt-firmware.git
+    source-type: git
+    source-tag: xilinx_v2024.2_update1
+    override-build: |
+      mkdir -p ${CRAFT_PART_INSTALL}/prebuilt
+      cp kv260-kria/* ${CRAFT_PART_INSTALL}/prebuilt/
+    prime:
+      - -*
   fsbl:
+    after:
+      - arm-toolchain
     plugin: nil
     source: https://github.com/Xilinx/embeddedsw.git
     source-tag: xilinx_v2025.1_update1
     build-packages:
-      - wget
+      - cmake
+      - ninja-build
     build-environment:
+      - PATH: '${CRAFT_STAGE}/bin:${PATH}'
       - PROC: 'a53'
       - BOARD: 'zcu102'
       - A53_STATE: '64'
-    override-pull: |
-      craftctl default
-      wget https://developer.arm.com/-/media/Files/downloads/gnu/14.3.rel1/binrel/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf.tar.xz
-      tar xvf arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf.tar.xz
     override-build: |
-      TOOLCHAIN_DIR="$(pwd)/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf"
-      # Add the toolchain's main bin directory to the PATH
-      export PATH="$TOOLCHAIN_DIR/bin:$PATH"
+      # Copy psu_init files to som directory
+      cp ${CRAFT_PROJECT_DIR}/extras/psu_init.c lib/sw_apps/zynqmp_fsbl/misc/zcu102/
+      cp ${CRAFT_PROJECT_DIR}/extras/psu_init.h lib/sw_apps/zynqmp_fsbl/misc/zcu102/
 
-      # The toolchain is looking for helpers in a hardcoded system path.
-      # We create that path and symlink our locally extracted toolchain libs into it.
-      # This requires sudo, which is available during Snapcraft builds.
-      HARDCODED_PATH="/usr/libexec/gcc/aarch64-none-elf/14.3.1"
-      ACTUAL_LIBS_PATH="$TOOLCHAIN_DIR/libexec/gcc/aarch64-none-elf/14.3.1"
-
-      echo "Applying symlink fix for hardcoded toolchain path..."
-      if [ -d "$ACTUAL_LIBS_PATH" ]; then
-        # Create the parent directories for the hardcoded path
-        mkdir -p "$(dirname "$HARDCODED_PATH")"
-        # Create the symbolic link
-        ln -s "$ACTUAL_LIBS_PATH" "$HARDCODED_PATH" || true
-        echo "Symlink created successfully."
-      else
-        echo "ERROR: Toolchain internal directory not found at $ACTUAL_LIBS_PATH"
-        exit 1
-      fi
-
+      # Switch to traditional make build as CMake seems to have issues
       cd lib/sw_apps/zynqmp_fsbl/src/
-      make CFLAGS+=-DFSBL_DEBUG_INFO
+
+      make clean
+      make BOARD=zcu102 \
+           CROSS_COMPILE=aarch64-none-elf- \
+           -j$(nproc)
+
+
+      # Install the built FSBL
       install -D -m 0644 fsbl.elf ${CRAFT_PART_INSTALL}/blobs/fsbl.elf
+      install -D -m 0644 ${CRAFT_PROJECT_DIR}/blobs/fsbl-k26-sm-sdt.elf ${CRAFT_PART_INSTALL}/blobs/fsbl-k26-sm-sdt.elf
     stage:
       - blobs/fsbl.elf
+      - blobs/fsbl-k26-sm-sdt.elf
     prime:
       - -*
-  pmu-firmware:
-    plugin: dump
-    source: .
-    stage:
-      - blobs/pmu-firmware-k26-sm-sdt.elf
-      - blobs/pmufw.elf
-      - blobs/download.bit
-      - blobs/system-zynqmp-sck-kv-g-revB.dtb
-    prime:
-      - -*
+  #pmu-firmware:
+  #  plugin: nil
+  #  source: https://github.com/Xilinx/embeddedsw.git
+  #  source-tag: xilinx_v2025.1_update1
+  #  build-packages:
+  #    - wget
+  #    - cmake
+  #  override-pull: |
+  #    craftctl default
+  #    wget https://developer.arm.com/-/media/Files/downloads/gnu/14.3.rel1/binrel/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf.tar.xz
+  #    tar xvf arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf.tar.xz
+  #  override-build: |
+  #    TOOLCHAIN_DIR="$(pwd)/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf"
+  #    # Add the toolchain's main bin directory to the PATH
+  #    export PATH="$TOOLCHAIN_DIR/bin:$PATH"
+
+  #    # The toolchain is looking for helpers in a hardcoded system path.
+  #    # We create that path and symlink our locally extracted toolchain libs into it.
+  #    # This requires sudo, which is available during Snapcraft builds.
+  #    HARDCODED_PATH="/usr/libexec/gcc/aarch64-none-elf/14.3.1"
+  #    ACTUAL_LIBS_PATH="$TOOLCHAIN_DIR/libexec/gcc/aarch64-none-elf/14.3.1"
+
+  #    echo "Applying symlink fix for hardcoded toolchain path..."
+  #    if [ -d "$ACTUAL_LIBS_PATH" ]; then
+  #      # Create the parent directories for the hardcoded path
+  #      mkdir -p "$(dirname "$HARDCODED_PATH")"
+  #      # Create the symbolic link
+  #      ln -s "$ACTUAL_LIBS_PATH" "$HARDCODED_PATH" || true
+  #      echo "Symlink created successfully."
+  #    else
+  #      echo "ERROR: Toolchain internal directory not found at $ACTUAL_LIBS_PATH"
+  #      exit 1
+  #    fi
+
+  #    cd lib/sw_apps/zynqmp_pmufw/src/
+  #    make
+  #    #install -D -m 0644 fsbl.elf ${CRAFT_PART_INSTALL}/blobs/fsbl.elf
+  #  stage:
+  #    - blobs/fsbl.elf
+  #  prime:
+  #    - -*
   arm-trusted-firmware:
     # See 'snapcraft plugins'
     plugin: nil
@@ -135,11 +189,12 @@ parts:
       - -*
   boot-bin:
     after:
+      - blobs
       - bootgen
       - fsbl
       - u-boot
       - arm-trusted-firmware
-      - pmu-firmware
+      #- pmu-firmware
     plugin: dump
     source: .
     build-environment:
