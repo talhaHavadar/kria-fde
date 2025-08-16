@@ -41,15 +41,23 @@ parts:
       - -*
   ###################### END OF TOOLCHAIN SETUP ###############################
   blobs:
-    plugin: nil
-    source: https://github.com/Xilinx/soc-prebuilt-firmware.git
-    source-type: git
-    source-tag: xilinx_v2024.2_update1
+    plugin: dump
+    source: .
     override-build: |
       mkdir -p ${CRAFT_PART_INSTALL}/prebuilt
-      cp kv260-kria/* ${CRAFT_PART_INSTALL}/prebuilt/
+      cp extras/bins/* ${CRAFT_PART_INSTALL}/prebuilt/
     prime:
       - -*
+  # blobs:
+  #   plugin: nil
+  #   source: https://github.com/Xilinx/soc-prebuilt-firmware.git
+  #   source-type: git
+  #   source-tag: xilinx_v2024.2_update1
+  #   override-build: |
+  #     mkdir -p ${CRAFT_PART_INSTALL}/prebuilt
+  #     cp kv260-kria/* ${CRAFT_PART_INSTALL}/prebuilt/
+  #   prime:
+  #     - -*
   fsbl:
     after:
       - arm-toolchain
@@ -62,19 +70,20 @@ parts:
     build-environment:
       - PATH: '${CRAFT_STAGE}/bin:${PATH}'
       - PROC: 'a53'
-      - BOARD: 'zcu102'
+      - BOARD: 'som'
       - A53_STATE: '64'
     override-build: |
       # Copy psu_init files to som directory
-      cp ${CRAFT_PROJECT_DIR}/extras/psu_init.c lib/sw_apps/zynqmp_fsbl/misc/zcu102/
-      cp ${CRAFT_PROJECT_DIR}/extras/psu_init.h lib/sw_apps/zynqmp_fsbl/misc/zcu102/
+      cp ${CRAFT_PROJECT_DIR}/extras/psu_init.c lib/sw_apps/zynqmp_fsbl/misc/som/
+      cp ${CRAFT_PROJECT_DIR}/extras/psu_init.h lib/sw_apps/zynqmp_fsbl/misc/som/
 
       # Switch to traditional make build as CMake seems to have issues
       cd lib/sw_apps/zynqmp_fsbl/src/
 
       make clean
-      make BOARD=zcu102 \
+      make BOARD=som \
            CROSS_COMPILE=aarch64-none-elf- \
+           CFLAGS+=-DFSBL_DEBUG_INFO \
            -j$(nproc)
 
 
@@ -167,13 +176,15 @@ parts:
       # k26 kv device tree
       - DEVICE_TREE: 'zynqmp-smk-k26-revA-sck-kv-g-revB'
     override-build: |
-      # Add GIT revision to the local version
+      # Add custom version from snapcraft.yaml
       head=$(git rev-parse --verify --short HEAD 2> /dev/null)
       version=$(make ubootversion)
-      printf "%s%s%s%s" "-${version}" "-rz" "+g" "${head}" > .scmversion
 
       make xilinx_zynqmp_kria_defconfig
-      make DEVICE_TREE=${DEVICE_TREE} -j$(nproc)
+      # Set custom version directly via LOCALVERSION
+      make DEVICE_TREE=${DEVICE_TREE} \
+           LOCALVERSION="-snap-${SNAPCRAFT_PROJECT_VERSION}[tchavadar]" \
+           -j$(nproc)
       install -D -m 0644 u-boot.elf ${CRAFT_PART_INSTALL}/blobs/u-boot.elf
     prime:
       - -*
