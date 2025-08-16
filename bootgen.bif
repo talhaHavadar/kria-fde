@@ -1,10 +1,9 @@
 the_ROM_image:
 {
-	[bootloader, destination_cpu=a53-0] blobs/fsbl-k26-sm-sdt.elf
-	[pmufw_image] prebuilt/pmufw.elf
-    [destination_device=pl] prebuilt/download.bit
-	[destination_cpu=a53-0, load=0x100000] prebuilt/system-zynqmp-sck-kv-g-revB.dtb
-	[destination_cpu=a53-0, exception_level=el-3, trustzone] prebuilt/bl31.elf
-	[destination_cpu=a53-0, exception_level=el-2] prebuilt/u-boot.elf
-    [udf_bh] prebuilt/som_build_info.txt
+	[bootloader, destination_cpu=a53-0] prebuilt/fsbl-k26-smk-sdt.elf
+	[destination_cpu=pmu] prebuilt/pmufw.elf
+	[destination_cpu=a53-0, exception_level=el-3, trustzone] blobs/bl31.elf
+	[destination_cpu=a53-0, load=0x100000] prebuilt/fit-dtb.blob
+	[destination_cpu=a53-0, exception_level=el-2] blobs/u-boot.elf
+    [udf_bh] prebuilt/bootbin-version-header-k26-smk-sdt.txt
 }
