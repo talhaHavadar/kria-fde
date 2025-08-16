@@ -89,10 +89,8 @@ parts:
 
       # Install the built FSBL
       install -D -m 0644 fsbl.elf ${CRAFT_PART_INSTALL}/blobs/fsbl.elf
-      install -D -m 0644 ${CRAFT_PROJECT_DIR}/blobs/fsbl-k26-sm-sdt.elf ${CRAFT_PART_INSTALL}/blobs/fsbl-k26-sm-sdt.elf
     stage:
       - blobs/fsbl.elf
-      - blobs/fsbl-k26-sm-sdt.elf
     prime:
       - -*
   #pmu-firmware:
