@@ -19,6 +19,64 @@ environment:
 # prebuilt bins: https://github.com/Xilinx/embpf-bootfw-update-tool/releases/tag/v3.0
 # following: https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842156/Fetch+Sources
 parts:
+  microblaze-toolchain:
+    plugin: nil
+    source: https://github.com/buildroot/buildroot.git
+    source-type: git
+    #source-tag: 2024.02.8
+    source-tag: 2025.05.1
+    build-packages:
+      - build-essential
+      - texinfo
+      - bison
+      - flex
+      - gawk
+      - libtool
+      - automake
+      - libncurses5-dev
+      - gettext
+      - zlib1g-dev
+      - rsync
+      - file
+      - bc
+      - wget
+      - cpio
+      - python3
+      - unzip
+    override-build: |
+      # Create a proper MicroBlaze baremetal defconfig
+      cat > configs/microblaze_baremetal_defconfig << 'EOF'
+      BR2_microblazeel=y
+      BR2_TOOLCHAIN_BUILDROOT=y
+      BR2_TOOLCHAIN_BUILDROOT_VENDOR="xilinx"
+      BR2_TOOLCHAIN_BUILDROOT_LIBC="newlib"
+      BR2_TOOLCHAIN_BUILDROOT_NEWLIB=y
+      BR2_TOOLCHAIN_BUILDROOT_CXX=y
+      BR2_GCC_VERSION_13_X=y
+      BR2_BINUTILS_VERSION_2_42_X=y
+      BR2_INIT_NONE=y
+      BR2_SYSTEM_BIN_SH_NONE=y
+      # Disable kernel and rootfs - we only want toolchain
+      BR2_LINUX_KERNEL=n
+      BR2_TARGET_ROOTFS_TAR=n
+      BR2_PACKAGE_BUSYBOX=n
+      # Enable newlib nano for embedded
+      BR2_TOOLCHAIN_BUILDROOT_NEWLIB_NANO=y
+      EOF
+
+      # Configure buildroot with our custom config
+      make microblaze_baremetal_defconfig
+
+      # Build only the toolchain
+      make toolchain -j$(nproc)
+
+      # Install the toolchain
+      mkdir -p ${CRAFT_PART_INSTALL}/microblaze-toolchain
+      cp -r output/host/* ${CRAFT_PART_INSTALL}/microblaze-toolchain/
+    stage:
+      - microblaze-toolchain/
+    prime:
+      - -*
   arm-toolchain:
     plugin: nil
     source: https://developer.arm.com/-/media/Files/downloads/gnu/13.3.rel1/binrel/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-elf.tar.xz
@@ -48,25 +106,12 @@ parts:
       cp extras/bins/* ${CRAFT_PART_INSTALL}/prebuilt/
     prime:
       - -*
-  # blobs:
-  #   plugin: nil
-  #   source: https://github.com/Xilinx/soc-prebuilt-firmware.git
-  #   source-type: git
-  #   source-tag: xilinx_v2024.2_update1
-  #   override-build: |
-  #     mkdir -p ${CRAFT_PART_INSTALL}/prebuilt
-  #     cp kv260-kria/* ${CRAFT_PART_INSTALL}/prebuilt/
-  #   prime:
-  #     - -*
   fsbl:
     after:
       - arm-toolchain
     plugin: nil
     source: https://github.com/Xilinx/embeddedsw.git
     source-tag: xilinx_v2025.1_update1
-    build-packages:
-      - cmake
-      - ninja-build
     build-environment:
       - PATH: '${CRAFT_STAGE}/bin:${PATH}'
       - PROC: 'a53'
@@ -92,49 +137,68 @@ parts:
       - blobs/fsbl.elf
     prime:
       - -*
-  #pmu-firmware:
-  #  plugin: nil
-  #  source: https://github.com/Xilinx/embeddedsw.git
-  #  source-tag: xilinx_v2025.1_update1
-  #  build-packages:
-  #    - wget
-  #    - cmake
-  #  override-pull: |
-  #    craftctl default
-  #    wget https://developer.arm.com/-/media/Files/downloads/gnu/14.3.rel1/binrel/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf.tar.xz
-  #    tar xvf arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf.tar.xz
-  #  override-build: |
-  #    TOOLCHAIN_DIR="$(pwd)/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf"
-  #    # Add the toolchain's main bin directory to the PATH
-  #    export PATH="$TOOLCHAIN_DIR/bin:$PATH"
+  pmu-firmware:
+    after:
+      - microblaze-toolchain
+    plugin: nil
+    source: https://github.com/Xilinx/embeddedsw.git
+    source-tag: xilinx_v2025.1_update1
+    build-environment:
+      - PATH: '${CRAFT_STAGE}/microblaze-toolchain/bin:${PATH}'
+      - MB_GNU: '${CRAFT_STAGE}/microblaze-toolchain'
+    override-build: |
+      # TODO: skip pmu-firmware build for now
+      exit 0
+      # Find the actual MicroBlaze compiler
+      MB_COMPILER=$(find ${CRAFT_STAGE}/microblaze-toolchain/bin -name "microblaze*-gcc" | head -1)
+      if [ -z "$MB_COMPILER" ]; then
+        echo "ERROR: Could not find MicroBlaze compiler!"
+        exit 1
+      fi
 
-  #    # The toolchain is looking for helpers in a hardcoded system path.
-  #    # We create that path and symlink our locally extracted toolchain libs into it.
-  #    # This requires sudo, which is available during Snapcraft builds.
-  #    HARDCODED_PATH="/usr/libexec/gcc/aarch64-none-elf/14.3.1"
-  #    ACTUAL_LIBS_PATH="$TOOLCHAIN_DIR/libexec/gcc/aarch64-none-elf/14.3.1"
+      # Extract the toolchain prefix
+      MB_PREFIX=$(basename $MB_COMPILER | sed 's/-gcc$//')
+      echo "Found MicroBlaze toolchain: $MB_PREFIX"
 
-  #    echo "Applying symlink fix for hardcoded toolchain path..."
-  #    if [ -d "$ACTUAL_LIBS_PATH" ]; then
-  #      # Create the parent directories for the hardcoded path
-  #      mkdir -p "$(dirname "$HARDCODED_PATH")"
-  #      # Create the symbolic link
-  #      ln -s "$ACTUAL_LIBS_PATH" "$HARDCODED_PATH" || true
-  #      echo "Symlink created successfully."
-  #    else
-  #      echo "ERROR: Toolchain internal directory not found at $ACTUAL_LIBS_PATH"
-  #      exit 1
-  #    fi
+      # Test the compiler
+      $MB_COMPILER --version || (echo "MicroBlaze GCC test failed!" && exit 1)
 
-  #    cd lib/sw_apps/zynqmp_pmufw/src/
-  #    make
-  #    #install -D -m 0644 fsbl.elf ${CRAFT_PART_INSTALL}/blobs/fsbl.elf
-  #  stage:
-  #    - blobs/fsbl.elf
-  #  prime:
-  #    - -*
+      # Build PMU firmware
+      cd lib/sw_apps/zynqmp_pmufw/src/
+
+      # Clean any previous builds
+      make clean || true
+
+      # Find the sysroot for the toolchain
+      SYSROOT="${CRAFT_STAGE}/microblaze-toolchain/${MB_PREFIX}/sysroot"
+      if [ ! -d "$SYSROOT" ]; then
+        # Try alternate location
+        SYSROOT="${CRAFT_STAGE}/microblaze-toolchain/sysroot"
+      fi
+
+      echo "Using sysroot: $SYSROOT"
+
+      # Build with our buildroot toolchain using full names and proper sysroot
+      make COMPILER=${MB_PREFIX}-gcc \
+           ARCHIVER=${MB_PREFIX}-ar \
+           CC=${MB_PREFIX}-gcc \
+           CFLAGS="-Os -flto --sysroot=${SYSROOT}" \
+           -j$(nproc)
+
+      # Verify the build output
+      if [ ! -f executable.elf ]; then
+        echo "ERROR: PMU firmware build failed - executable.elf not found"
+        exit 1
+      fi
+
+      # Install the firmware
+      install -D -m 0644 executable.elf ${CRAFT_PART_INSTALL}/blobs/pmufw.elf
+      echo "PMU firmware built and installed successfully"
+    # stage:
+    #   - blobs/pmufw.elf
+    prime:
+      - -*
   arm-trusted-firmware:
-    # See 'snapcraft plugins'
     plugin: nil
     source: https://github.com/Xilinx/arm-trusted-firmware.git
     source-type: git
@@ -213,7 +277,7 @@ parts:
       - fsbl
       - u-boot
       - arm-trusted-firmware
-      #- pmu-firmware
+      - pmu-firmware
     plugin: dump
     source: .
     build-environment:
