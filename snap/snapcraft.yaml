@@ -209,9 +209,9 @@ parts:
       - CROSS_COMPILE: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-'
       - CC: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-gcc'
       - LD: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-gcc'
-      #- CFLAGS: '-mcpu=cortex-a72.cortex-a53+crc -mbranch-protection=standard -fstack-protector-strong -O2'
       - ZYNQMP_CONSOLE: 'cadence1'
       - PRELOADED_BL33_BASE: '0x8000000'
+      - BL32_BASE: '0x6000000'
     override-build: |
       make CROSS_COMPILE=${CROSS_COMPILE} \
         PLAT=${PLAT} \
@@ -219,10 +219,51 @@ parts:
         RESET_TO_BL2=${RESET_TO_BL2} \
         ZYNQMP_CONSOLE=${ZYNQMP_CONSOLE} \
         PRELOADED_BL33_BASE=${PRELOADED_BL33_BASE} \
+        SPD=opteed \
         -j$(nproc) bl31
+        # BL32_BASE=${BL32_BASE} \
+        # NEED_BL32=yes \
       install -D -m 0644 build/${PLAT}/release/bl31/bl31.elf ${CRAFT_PART_INSTALL}/blobs/arm-trusted-firmware.elf
     stage:
       - blobs/arm-trusted-firmware.elf
+    prime:
+      - -*
+  optee-os:
+    plugin: nil
+    source: https://github.com/Xilinx/optee_os.git
+    source-type: git
+    source-tag: xlnx_rebase_v4.5.0_2025.1_update1
+    override-pull: |
+      craftctl default
+      curl https://storage.googleapis.com/git-repo-downloads/repo > /bin/repo && chmod a+x /bin/repo
+      repo init -u https://github.com/Xilinx/optee_manifest.git
+      cp ${CRAFT_PROJECT_DIR}/optee_zynqmp.xml .repo/manifests/
+      repo init -m optee_zynqmp.xml && repo sync -j$(nproc)
+    build-packages:
+      - python3-cryptography
+      - python3-pyelftools
+    build-environment:
+      - CROSS_COMPILE: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-'
+      - CROSS_COMPILE_core: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-'
+      - CROSS_COMPILE_ta_arm64: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-'
+      - CC: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-gcc'
+      - LD: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-gcc'
+      - PLATFORM: zynqmp-zcu102
+      - CFG_ARM64_core: y
+      - CFG_TEE_CORE_LOG_LEVEL: '2'
+      - CFG_TEE_TA_LOG_LEVEL: '2'
+      - CFG_ENABLE_EMBEDDED_TESTS: 'n'
+      - CFG_REE_FS: 'y'
+      - CFG_RPMB_FS: 'n'
+    override-build: |
+      cd build
+      make toolchains
+      make PLATFORM=${PLATFORM} \
+        optee-os
+      install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee.elf \
+                         ${CRAFT_PART_INSTALL}/blobs/tee.elf
+      install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee-raw.bin \
+                         ${CRAFT_PART_INSTALL}/blobs/tee.bin
     prime:
       - -*
   u-boot:
@@ -272,8 +313,9 @@ parts:
       - blobs
       - bootgen
       - fsbl
-      - u-boot
       - arm-trusted-firmware
+      - optee-os
+      - u-boot
       - pmu-firmware
     plugin: dump
     source: .
