@@ -13,9 +13,6 @@ platforms:
   arm64:
     build-on: [amd64, arm64]
     build-for: arm64
-environment:
-  LD_LIBRARY_PATH: ${SNAP}/usr/lib:${SNAP}/usr/lib/${CRAFT_ARCH_TRIPLET_BUILD_FOR}
-  PATH: ${SNAP}/bin:/usr/libexec/gcc/aarch64-none-elf/14.3.1/:${PATH}
 # prebuilt bins: https://github.com/Xilinx/embpf-bootfw-update-tool/releases/tag/v3.0
 # following: https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842156/Fetch+Sources
 parts:
