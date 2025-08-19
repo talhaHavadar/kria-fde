@@ -246,12 +246,8 @@ parts:
     build-packages:
       - python3-cryptography
       - python3-pyelftools
+      - uuid-dev
     build-environment:
-      - CROSS_COMPILE: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-'
-      - CROSS_COMPILE_core: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-'
-      - CROSS_COMPILE_ta_arm64: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-'
-      - CC: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-gcc'
-      - LD: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-gcc'
       - PLATFORM: zynqmp-zcu102
       - CFG_ARM64_core: y
       - CFG_TEE_CORE_LOG_LEVEL: '2'
