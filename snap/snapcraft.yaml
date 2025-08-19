@@ -11,8 +11,6 @@ grade: devel # must be 'stable' to release into candidate/stable channels
 confinement: devmode # use 'strict' once you have the right plugs and slots
 platforms:
   arm64:
-    build-on: [amd64, arm64]
-    build-for: arm64
 # prebuilt bins: https://github.com/Xilinx/embpf-bootfw-update-tool/releases/tag/v3.0
 # following: https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842156/Fetch+Sources
 parts:
@@ -104,7 +102,7 @@ parts:
       mkdir -p ${CRAFT_PART_INSTALL}/prebuilt
       mkdir -p ${CRAFT_PART_INSTALL}/blobs
       cp extras/bins/* ${CRAFT_PART_INSTALL}/prebuilt/
-      echo "${CRAFT_PROJECT_VERSION}" | xxd -p > ${CRAFT_PART_INSTALL}/blobs/bootbin-version-header.txt
+      echo "${CRAFT_PROJECT_VERSION}-$(git describe --always)-snap" | xxd -p > ${CRAFT_PART_INSTALL}/blobs/bootbin-version-header.txt
     prime:
       - -*
   fsbl:
