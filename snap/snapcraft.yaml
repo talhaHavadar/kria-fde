@@ -210,23 +210,17 @@ parts:
       - PLAT: 'zynqmp'
       - RESET_TO_BL31: '1'
       - RESET_TO_BL2: '0'
-      - CROSS_COMPILE: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-'
-      - CC: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-gcc'
-      - LD: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-gcc'
       - ZYNQMP_CONSOLE: 'cadence1'
       - PRELOADED_BL33_BASE: '0x8000000'
-      - BL32_BASE: '0x60000000'
+      - SPD: 'opteed'
     override-build: |
-      make CROSS_COMPILE=${CROSS_COMPILE} \
-        PLAT=${PLAT} \
+      make PLAT=${PLAT} \
+        SPD=${SPD} \
+        ZYNQMP_CONSOLE=${ZYNQMP_CONSOLE} \
         RESET_TO_BL31=${RESET_TO_BL31} \
         RESET_TO_BL2=${RESET_TO_BL2} \
-        ZYNQMP_CONSOLE=${ZYNQMP_CONSOLE} \
         PRELOADED_BL33_BASE=${PRELOADED_BL33_BASE} \
-        BL32_BASE=${BL32_BASE} \
-        SPD=opteed \
-        -j$(nproc) bl31
-        # NEED_BL32=yes \
+        bl31 -j$(nproc)
       install -D -m 0644 build/${PLAT}/release/bl31/bl31.elf ${CRAFT_PART_INSTALL}/blobs/arm-trusted-firmware.elf
     stage:
       - blobs/arm-trusted-firmware.elf
@@ -250,16 +244,13 @@ parts:
     build-environment:
       - PLATFORM: zynqmp-zcu102
       - CFG_ARM64_core: y
-      - CFG_TEE_CORE_LOG_LEVEL: '2'
-      - CFG_TEE_TA_LOG_LEVEL: '2'
-      - CFG_ENABLE_EMBEDDED_TESTS: 'n'
-      - CFG_REE_FS: 'y'
-      - CFG_RPMB_FS: 'n'
+      - CFG_RPMB_FS: n
+      - CFG_TEE_CORE_LOG_LEVEL: '4'
+      - CFG_TEE_TA_LOG_LEVEL: '4'
     override-build: |
       cd build
-      make toolchains
-      make PLATFORM=${PLATFORM} \
-        optee-os
+      make toolchains -j$(nproc)
+      make optee-os -j$(nproc)
       install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee.elf \
                          ${CRAFT_PART_INSTALL}/blobs/tee.elf
       install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee-raw.bin \
