@@ -98,9 +98,13 @@ parts:
   blobs:
     plugin: dump
     source: .
+    build-packages:
+      - xxd
     override-build: |
       mkdir -p ${CRAFT_PART_INSTALL}/prebuilt
+      mkdir -p ${CRAFT_PART_INSTALL}/blobs
       cp extras/bins/* ${CRAFT_PART_INSTALL}/prebuilt/
+      echo "${CRAFT_PROJECT_VERSION}" | xxd -p > ${CRAFT_PART_INSTALL}/blobs/bootbin-version-header.txt
     prime:
       - -*
   fsbl:
@@ -211,7 +215,7 @@ parts:
       - LD: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-gcc'
       - ZYNQMP_CONSOLE: 'cadence1'
       - PRELOADED_BL33_BASE: '0x8000000'
-      - BL32_BASE: '0x6000000'
+      - BL32_BASE: '0x60000000'
     override-build: |
       make CROSS_COMPILE=${CROSS_COMPILE} \
         PLAT=${PLAT} \
@@ -219,9 +223,9 @@ parts:
         RESET_TO_BL2=${RESET_TO_BL2} \
         ZYNQMP_CONSOLE=${ZYNQMP_CONSOLE} \
         PRELOADED_BL33_BASE=${PRELOADED_BL33_BASE} \
+        BL32_BASE=${BL32_BASE} \
         SPD=opteed \
         -j$(nproc) bl31
-        # BL32_BASE=${BL32_BASE} \
         # NEED_BL32=yes \
       install -D -m 0644 build/${PLAT}/release/bl31/bl31.elf ${CRAFT_PART_INSTALL}/blobs/arm-trusted-firmware.elf
     stage:
