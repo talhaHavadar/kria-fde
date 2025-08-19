@@ -247,6 +247,7 @@ parts:
       - CFG_RPMB_FS: n
       - CFG_TEE_CORE_LOG_LEVEL: '4'
       - CFG_TEE_TA_LOG_LEVEL: '4'
+      - CFG_UART_BASE: 'UART1_BASE'
     override-build: |
       cd build
       make toolchains -j$(nproc)
