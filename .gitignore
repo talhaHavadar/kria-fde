@@ -1,2 +1,5 @@
 squashfs-root/
 *.snap
+*.tar.xz
+*.tar.gz
+BOOT.bin
